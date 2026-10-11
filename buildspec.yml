@@ -1,0 +1,29 @@
+version: 0.2
+
+env:
+  variables:
+    AWS_REGION: "ap-south-1"
+    ECR_REPO: "brain-tasks-app"
+    EKS_CLUSTER: "brain-tasks-cluster"
+
+phases:
+  install:
+    commands:
+      - curl -LO "https://dl.k8s.io/release/v1.29.0/bin/linux/amd64/kubectl"
+      - chmod +x kubectl && mv kubectl /usr/local/bin/kubectl
+  pre_build:
+    commands:
+      - AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+      - REPO_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO
+      - IMAGE_TAG=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c1-7)
+      - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+  build:
+    commands:
+      - docker build -t $REPO_URI:$IMAGE_TAG .
+      - docker push $REPO_URI:$IMAGE_TAG
+  post_build:
+    commands:
+      - aws eks update-kubeconfig --name $EKS_CLUSTER --region $AWS_REGION
+      - sed -i "s|IMAGE_PLACEHOLDER|$REPO_URI:$IMAGE_TAG|g" k8s/deployment.yaml
+      - kubectl apply -f k8s/
+      - kubectl rollout status deployment/brain-tasks-app

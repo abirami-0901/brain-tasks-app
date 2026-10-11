@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: brain-tasks-app
+  labels:
+    app: brain-tasks-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: brain-tasks-app
+  template:
+    metadata:
+      labels:
+        app: brain-tasks-app
+    spec:
+      containers:
+        - name: brain-tasks-app
+          image: IMAGE_PLACEHOLDER
+          ports:
+            - containerPort: 3000
