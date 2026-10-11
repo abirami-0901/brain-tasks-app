@@ -39,9 +39,6 @@ docker run -d -p 3000:3000 brain-tasks-app
 ```
 Open http://localhost:3000
 
-![Docker build](screenshots/01-docker-build.png)
-![Localhost](screenshots/02-docker-run-localhost.png)
-
 **2. Push the image to ECR**
 ```bash
 aws ecr create-repository --repository-name brain-tasks-app --region ap-south-1
@@ -52,9 +49,6 @@ docker tag brain-tasks-app:latest $REPO_URI:latest
 docker push $REPO_URI:latest
 ```
 
-![ECR repo](screenshots/03-ecr-repository.png)
-![Image pushed](screenshots/04-ecr-image-pushed.png)
-
 **3. Create the EKS cluster**
 ```bash
 eksctl create cluster --name brain-tasks-cluster --region ap-south-1 \
@@ -62,46 +56,32 @@ eksctl create cluster --name brain-tasks-cluster --region ap-south-1 \
 kubectl get nodes
 ```
 
-![Cluster active](screenshots/05-eks-cluster-active.png)
-![Nodes](screenshots/06-kubectl-nodes.png)
 
 **4. Deploy to Kubernetes**
 ```bash
 kubectl apply -f k8s/
 kubectl get pods,svc
 ```
-
-![Pods and service](screenshots/07-kubectl-pods-services.png)
-![App on load balancer](screenshots/08-app-loadbalancer-url.png)
-
 **5. Create the CodeBuild project** (`brain-tasks-build`)
 - Source: GitHub repo, branch `main`
 - Environment: Amazon Linux, Standard, **Privileged mode ON**
 - Buildspec: `buildspec.yml`
 - Role permissions: ECR access, `eks:DescribeCluster`, and the role added to the EKS cluster with `eksctl create iamidentitymapping`
 
-![CodeBuild project](screenshots/09-codebuild-project.png)
-![Build success](screenshots/10-codebuild-success.png)
 
 **6. Create the CodePipeline** (`brain-tasks-pipeline`)
 - Source: GitHub (via GitHub App), branch `main`
 - Build: CodeBuild project `brain-tasks-build`
 - The deploy to EKS runs in the build stage (`kubectl apply` in `buildspec.yml`)
 
-![Pipeline success](screenshots/11-codepipeline-success.png)
 
 ## Monitoring
 
 - Build and deploy logs: CloudWatch Logs, group `/aws/codebuild/brain-tasks-build`
 - App logs: `kubectl logs deployment/brain-tasks-app`
 
-![Log groups](screenshots/12-cloudwatch-log-groups.png)
-![Build logs](screenshots/13-cloudwatch-build-logs.png)
-![App logs](screenshots/13b-app-logs-kubectl.png)
 
 ## Load Balancer
-
-![Load balancer ARN](screenshots/14-loadbalancer-arn.png)
 
 No dependencies are required
 
