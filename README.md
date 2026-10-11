@@ -1,88 +1,107 @@
-DevOps Practice Project – Dist Directory
+# Brain Tasks App - AWS EKS Deployment
 
-This repository contains the production-ready build files (dist folder) for DevOps practice and deployment exercises.
+A React app deployed with Docker, ECR, EKS, CodeBuild and CodePipeline.
 
-It is intentionally structured to help learners focus on CI/CD pipelines, hosting, containerization, and infrastructure setup rather than application development.
+- **GitHub:** https://github.com/abirami-0901/brain-tasks-app
+- **Region:** ap-south-1 (Mumbai)
+- **Load Balancer ARN:**
+  `arn:aws:elasticloadbalancing:ap-south-1:827670477976:loadbalancer/net/a2e85e68834d548c4957555b66fe88ba/052cc706798d6488`
+- **App URL:** http://a2e85e68834d548c4957555b66fe88ba-052cc706798d6488.elb.ap-south-1.amazonaws.com
 
-📁 What This Repository Contains
+## How it works
 
-dist/ – Compiled and production-ready static files
+```
+GitHub push -> CodePipeline -> CodeBuild -> ECR (image) -> EKS -> Load Balancer
+```
 
-HTML
+1. **Source:** CodePipeline watches the `main` branch on GitHub.
+2. **Build:** CodeBuild runs `buildspec.yml`. It builds the Docker image, pushes it to ECR, then runs `kubectl apply` to deploy to EKS.
+3. **Run:** EKS runs 2 pods. A Network Load Balancer sends traffic from port 80 to the app on port 3000.
+4. **Logs:** Build and deploy logs go to CloudWatch (`/aws/codebuild/brain-tasks-build`).
 
-CSS
+## Files
 
-JavaScript
+| File | Purpose |
+|---|---|
+| `Dockerfile`, `nginx.conf` | Serve the app with nginx on port 3000 |
+| `buildspec.yml` | CodeBuild steps: build, push, deploy |
+| `k8s/deployment.yaml` | 2 replicas of the app |
+| `k8s/service.yaml` | LoadBalancer service (NLB) |
 
-Assets (images, fonts, etc.)
+## Setup steps
 
-These files are ready to deploy to:
+**1. Build and test locally**
+```bash
+git clone https://github.com/Vennilavanguvi/Brain-Tasks-App.git
+cd Brain-Tasks-App
+docker build -t brain-tasks-app .
+docker run -d -p 3000:3000 brain-tasks-app
+```
+Open http://localhost:3000
 
-Web servers (Nginx / Apache)
+![Docker build](screenshots/01-docker-build.png)
+![Localhost](screenshots/02-docker-run-localhost.png)
 
-Cloud platforms (AWS S3, Azure Blob, GCP Storage)
+**2. Push the image to ECR**
+```bash
+aws ecr create-repository --repository-name brain-tasks-app --region ap-south-1
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+REPO_URI=$AWS_ACCOUNT_ID.dkr.ecr.ap-south-1.amazonaws.com/brain-tasks-app
+aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.ap-south-1.amazonaws.com
+docker tag brain-tasks-app:latest $REPO_URI:latest
+docker push $REPO_URI:latest
+```
 
-Containerized environments (Docker + Nginx)
+![ECR repo](screenshots/03-ecr-repository.png)
+![Image pushed](screenshots/04-ecr-image-pushed.png)
 
-Kubernetes clusters
+**3. Create the EKS cluster**
+```bash
+eksctl create cluster --name brain-tasks-cluster --region ap-south-1 \
+  --nodegroup-name brain-tasks-nodes --node-type t3.medium --nodes 2 --managed
+kubectl get nodes
+```
 
-CI/CD pipeline demonstrations
+![Cluster active](screenshots/05-eks-cluster-active.png)
+![Nodes](screenshots/06-kubectl-nodes.png)
 
-🎯 Purpose of This Repository
+**4. Deploy to Kubernetes**
+```bash
+kubectl apply -f k8s/
+kubectl get pods,svc
+```
 
-This repository is designed for:
+![Pods and service](screenshots/07-kubectl-pods-services.png)
+![App on load balancer](screenshots/08-app-loadbalancer-url.png)
 
-DevOps beginners
+**5. Create the CodeBuild project** (`brain-tasks-build`)
+- Source: GitHub repo, branch `main`
+- Environment: Amazon Linux, Standard, **Privileged mode ON**
+- Buildspec: `buildspec.yml`
+- Role permissions: ECR access, `eks:DescribeCluster`, and the role added to the EKS cluster with `eksctl create iamidentitymapping`
 
-CI/CD practice
+![CodeBuild project](screenshots/09-codebuild-project.png)
+![Build success](screenshots/10-codebuild-success.png)
 
-Deployment pipeline testing
+**6. Create the CodePipeline** (`brain-tasks-pipeline`)
+- Source: GitHub (via GitHub App), branch `main`
+- Build: CodeBuild project `brain-tasks-build`
+- The deploy to EKS runs in the build stage (`kubectl apply` in `buildspec.yml`)
 
-Docker & Kubernetes deployment exercises
+![Pipeline success](screenshots/11-codepipeline-success.png)
 
-Web server configuration practice
+## Monitoring
 
-Reverse proxy and load balancer setup
+- Build and deploy logs: CloudWatch Logs, group `/aws/codebuild/brain-tasks-build`
+- App logs: `kubectl logs deployment/brain-tasks-app`
 
-The goal is to simulate real-world deployment scenarios using already built application files.
+![Log groups](screenshots/12-cloudwatch-log-groups.png)
+![Build logs](screenshots/13-cloudwatch-build-logs.png)
+![App logs](screenshots/13b-app-logs-kubectl.png)
 
-❓ Why is there NO package.json?
+## Load Balancer
 
-You may notice that this repository does not include:
-
-package.json
-
-node_modules
-
-Source code (src/)
-
-Build tools configuration
-
-✅ Reason:
-
-This repository only contains the final production build output (dist), not the development source code.
-
-In a typical project:
-
-Developers write source code.
-
-The project is built using tools like:
-
-Node.js
-
-Webpack
-
-Vite
-
-React (or other frameworks)
-
-A dist/ folder is generated.
-
-Only the production build is deployed to servers.
-
-This repository represents step 4 only.
-
-Since this is already the compiled output:
+![Load balancer ARN](screenshots/14-loadbalancer-arn.png)
 
 No dependencies are required
 
